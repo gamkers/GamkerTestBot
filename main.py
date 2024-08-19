@@ -10,7 +10,7 @@ CORS(app)
 
 # Initialize your OpenAI API key or any other model you are using
 
-@app.route('/', methods=['POST'])
+@app.route('/chat', methods=['POST'])
 def chat():
     try:
         # Get the input message from the request
