@@ -1,32 +1,20 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS  # Import CORS
+from flask import Flask, request, jsonify, session
+from flask_cors import CORS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
+import secrets 
+from datetime import timedelta 
 
 app = Flask(__name__)
-
+app.secret_key = secrets.token_hex(16) # Necessary for session management
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 # Initialize CORS
 CORS(app)
 
-# Initialize your OpenAI API key or any other model you are using
 
-@app.route('/chat', methods=['POST'])
-def chat():
-    try:
-        # Get the input message from the request
-        input_message = request.json.get('message')
-        if not input_message:
-            return jsonify({"error": "No message provided"}), 400
-
-        # Create the prompt template
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", "You are a helpful teacher for your students. You will explain the questions whatever students ask."),
-                ("human", "{input_message}")
-            ]
-        )
-
-        # Initialize the ChatGroq model
+def get_model():
+    """Lazy initialization of the ChatGroq model."""
+    if 'model' not in session:
         llm = ChatGroq(
             model="llama3-70b-8192",
             temperature=0,
@@ -34,14 +22,51 @@ def chat():
             timeout=None,
             max_retries=2,
             groq_api_key="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"
-        )
 
+        )
+        session['model'] = True
+    return llm
+
+
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    try:
+        input_message = request.json.get('message')
+        if not input_message:
+            return jsonify({"error": "No message provided"}), 400
+
+        # Initialize or retrieve conversation history
+        if 'history' not in session:
+            session['history'] = []
+
+        # Append the new message to the history
+        session['history'].append(("human", input_message))
+
+        if len(session['history']) > 4:
+            session['history'] = session['history'][-4:]
+
+        # Create the prompt template with dynamic variables
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", "You are a helpful teacher for your students. You will explain the questions whatever students ask. You will also remember the {previous_context}, but you don't need to mention the history every time."),
+                ("human", "{input_message}"),
+            ]
+        )
+        
+        llm = get_model()
         # Combine prompt and model
         chain = prompt | llm
 
-        # Get the result from the model
-        result = chain.invoke({"input_message": input_message})
+        # Invoke the chain with the input message and history
+        result = chain.invoke({"input_message": input_message, "previous_context": session['history']})
         result_content = result.content
+
+        # Append the model's response to the history
+        session['history'].append(("ai", result_content))
+
+        if len(session['history']) > 4:
+            session['history'] = session['history'][-4:]
 
         # Log the result for debugging
         print(result_content)
@@ -54,5 +79,5 @@ def chat():
         print(f"Error: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
