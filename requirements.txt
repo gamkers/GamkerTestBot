@@ -3,5 +3,3 @@ flask-cors
 langchain-core
 langchain-groq
 Gunicorn
-secrets
-datetime
