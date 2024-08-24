@@ -21,7 +21,7 @@ def get_model():
             max_tokens=None,
             timeout=None,
             max_retries=2,
-            groq_api_key="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"
+            groq_api_key="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"
 
         )
         session['model'] = True
